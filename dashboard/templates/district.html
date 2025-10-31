@@ -7,155 +7,171 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body {
-    font-family: Arial, sans-serif;
-    background: #f5f7fa;
-    margin: 0;
-    padding: 20px;
+  font-family: Arial, sans-serif;
+  background: #f5f7fa;
+  margin: 0;
+  padding: 20px;
 }
 .container {
-    max-width: 850px;
-    margin: 0 auto;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    padding: 25px;
+  max-width: 850px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  padding: 25px;
 }
-h1 {
-    text-align: center;
-    color: #2a4d69;
-}
+h1 { text-align: center; color: #2a4d69; }
 .controls {
-    display: flex;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    margin: 20px 0;
-    gap: 10px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin: 20px 0;
+  gap: 10px;
 }
-select {
-    flex: 1;
-    padding: 10px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    font-size: 15px;
+select, button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 15px;
+  cursor: pointer;
 }
-canvas {
-    width: 100%;
-    height: 420px;
-}
+button { background-color: #2a9d8f; color: white; }
+button:hover { background-color: #21867a; }
+canvas { width: 100%; height: 420px; }
+#loading { text-align: center; color: #666; margin-top: 20px; }
 footer {
-    text-align: center;
-    margin-top: 30px;
-    color: #777;
-    font-size: 14px;
+  text-align: center;
+  margin-top: 30px;
+  color: #777;
+  font-size: 14px;
 }
 </style>
 </head>
 <body>
 <div class="container">
-    <h1>{{ district.district_name }} District</h1>
-    <p style="text-align:center;">Visualize MGNREGA indicators over time</p>
+  <h1>{{ district.district_name }} District</h1>
+  <p style="text-align:center;">Visualize MGNREGA indicators over time</p>
 
-    <div class="controls">
-        <select id="termSelect">
-            <option value="total_exp_lakhs">💰 Total Expenditure (Lakhs)</option>
-            <option value="wages_lakhs">💵 Wages (Lakhs)</option>
-            <option value="total_jobcards_issued">🪪 Job Cards Issued</option>
-            <option value="total_active_job_cards">📄 Active Job Cards</option>
-            <option value="total_active_workers">⚡ Active Workers</option>
-            <option value="total_workers">👷 Total Workers</option>
-            <option value="total_households">🏡 Total Households Worked</option>
-            <option value="total_individuals">👥 Total Individuals Worked</option>
-        </select>
+  <div class="controls">
+    <select id="termSelect">
+      <option value="Total_Exp">💰 Total Expenditure (Lakhs)</option>
+      <option value="Wages">💵 Wages (Lakhs)</option>
+      <option value="Total_No_of_JobCards_issued">🪪 Job Cards Issued</option>
+      <option value="Total_No_of_Active_Job_Cards">📄 Active Job Cards</option>
+      <option value="Total_No_of_Active_Workers">⚡ Active Workers</option>
+      <option value="Total_No_of_Workers">👷 Total Workers</option>
+      <option value="Total_Households_Worked">🏡 Total Households Worked</option>
+      <option value="Total_Individuals_Worked">👥 Total Individuals Worked</option>
+    </select>
+    <button id="refreshBtn">🔄 Refresh Data</button>
+  </div>
 
-        <select id="timeSelect">
-            <option value="all">All Time</option>
-            <option value="6">Last 6 Months</option>
-            <option value="12">Last 12 Months</option>
-        </select>
-    </div>
-
-    <canvas id="chart"></canvas>
+  <div id="loading">Loading data...</div>
+  <canvas id="chart" style="display:none;"></canvas>
 </div>
 
 <footer>Made with ❤️ for MGNREGA Gujarat</footer>
 
 <script>
-const records = {{ records|safe }};
 const ctx = document.getElementById('chart');
+const loading = document.getElementById('loading');
+const refreshBtn = document.getElementById('refreshBtn');
+const termSelect = document.getElementById('termSelect');
+const districtName = "{{ district.district_name }}";
+const districtCode = "{{ district.district_code }}";
+const cacheKey = `mgnrega_${districtName.toUpperCase()}`;
 let chart;
 
-function getFilteredRecords(months) {
-    if (months === "all") return records;
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - parseInt(months));
-    return records.filter(r => {
-        const d = new Date(`${r.month}-01 ${r.fin_year}`);
-        return d >= cutoff;
-    });
+// ---- FETCH DATA LOGIC ----
+async function fetchData(force = false) {
+  const cache = localStorage.getItem(cacheKey);
+  if (!force && cache) {
+    const parsed = JSON.parse(cache);
+    drawChart(parsed.records, termSelect.value);
+    return;
+  }
+
+  loading.style.display = 'block';
+  ctx.style.display = 'none';
+
+  const apiUrl = `https://api.data.gov.in/resource/ee03643a-ee4c-48c2-ac30-9f2ff26ab722?api-key=579b464db66ec23bdd000001ad99c73e64ee402661b53ad8cf39ba86&format=json&filters[district_name]=${encodeURIComponent(districtName)}`;
+  try {
+    const res = await fetch(apiUrl);
+    const json = await res.json();
+    const records = json.records || [];
+
+    // Save locally + to backend
+    localStorage.setItem(cacheKey, JSON.stringify({ records, updated_at: Date.now() }));
+    sendToBackend(records);
+    drawChart(records, termSelect.value);
+  } catch (err) {
+    console.error(err);
+    loading.textContent = "⚠️ Failed to fetch data. Try again later.";
+  }
 }
 
-function drawChart(term, months) {
-    const filtered = getFilteredRecords(months);
-    const labels = filtered.map(r => r.month + " " + r.fin_year);
-    const data = filtered.map(r => r[term] || 0);
-    const colors = {
-        "total_exp_lakhs": "#2a9d8f",
-        "wages_lakhs": "#1d3557",
-        "total_jobcards_issued": "#43aa8b",
-        "total_active_job_cards": "#f4a261",
-        "total_active_workers": "#e76f51",
-        "total_workers": "#264653",
-        "total_households": "#8ab17d",
-        "total_individuals": "#6a4c93"
-    };
-    const titles = {
-        "total_exp_lakhs": "Total Expenditure (Lakhs)",
-        "wages_lakhs": "Wages (Lakhs)",
-        "total_jobcards_issued": "Job Cards Issued",
-        "total_active_job_cards": "Active Job Cards",
-        "total_active_workers": "Active Workers",
-        "total_workers": "Total Workers",
-        "total_households": "Total Households Worked",
-        "total_individuals": "Total Individuals Worked"
-    };
-
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: titles[term],
-                data: data,
-                borderColor: colors[term],
-                backgroundColor: colors[term] + "33",
-                fill: true,
-                tension: 0.3
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom' }
-            },
-            scales: {
-                x: { title: { display: true, text: 'Month' } },
-                y: { title: { display: true, text: 'Value' } }
-            }
-        }
+// ---- PUSH NEW DATA TO BACKEND ----
+async function sendToBackend(records) {
+  try {
+    await fetch(`/api/save-records/${districtCode}/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ records }),
     });
+  } catch (e) {
+    console.warn("DB sync failed:", e);
+  }
 }
 
-// Initialize default chart
-drawChart('total_exp_lakhs', 'all');
+// ---- CHART RENDERER ----
+function drawChart(records, term) {
+  loading.style.display = 'none';
+  ctx.style.display = 'block';
 
-// Update on selection change
-document.getElementById('termSelect').addEventListener('change', function() {
-    drawChart(this.value, document.getElementById('timeSelect').value);
-});
-document.getElementById('timeSelect').addEventListener('change', function() {
-    drawChart(document.getElementById('termSelect').value, this.value);
-});
+  const labels = records.map(r => r.month + " " + r.fin_year);
+  const data = records.map(r => parseFloat(r[term]) || 0);
+  const colors = {
+    "Total_Exp": "#2a9d8f",
+    "Wages": "#1d3557",
+    "Total_No_of_JobCards_issued": "#43aa8b",
+    "Total_No_of_Active_Job_Cards": "#f4a261",
+    "Total_No_of_Active_Workers": "#e76f51",
+    "Total_No_of_Workers": "#264653",
+    "Total_Households_Worked": "#8ab17d",
+    "Total_Individuals_Worked": "#6a4c93"
+  };
+
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: term.replaceAll("_", " "),
+        data,
+        borderColor: colors[term] || "#333",
+        backgroundColor: (colors[term] || "#333") + "33",
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        x: { title: { display: true, text: 'Month' } },
+        y: { title: { display: true, text: 'Value' } }
+      }
+    }
+  });
+}
+
+termSelect.addEventListener('change', () => fetchData());
+refreshBtn.addEventListener('click', () => fetchData(true));
+
+// ---- INITIAL LOAD ----
+fetchData();
 </script>
 </body>
 </html>
