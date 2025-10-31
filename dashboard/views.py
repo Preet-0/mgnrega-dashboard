@@ -1,8 +1,9 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, csrf_exempt
+from django.utils import timezone
 from dashboard.models import District, MgnregaRecord
-import requests
+import requests, json
 
 
 def index(request):
@@ -74,3 +75,41 @@ def district_records_api(request, district_code):
         for r in records
     ]
     return JsonResponse({"district": district.district_name, "data": data})
+
+
+# ✅ NEW: Frontend → Backend sync endpoint
+@csrf_exempt
+def save_records(request, district_code):
+    """Accepts POSTed JSON data from frontend and stores it in DB."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
+    try:
+        body = json.loads(request.body)
+        records = body.get("records", [])
+        district = get_object_or_404(District, district_code=district_code)
+        saved = 0
+
+        for item in records:
+            MgnregaRecord.objects.update_or_create(
+                district=district,
+                fin_year=item.get("fin_year"),
+                month=item.get("month"),
+                defaults={
+                    "total_exp_lakhs": item.get("Total_Exp"),
+                    "wages_lakhs": item.get("Wages"),
+                    "total_jobcards_issued": item.get("Total_No_of_JobCards_issued"),
+                    "total_active_job_cards": item.get("Total_No_of_Active_Job_Cards"),
+                    "total_active_workers": item.get("Total_No_of_Active_Workers"),
+                    "total_workers": item.get("Total_No_of_Workers"),
+                    "total_households": item.get("Total_Households_Worked"),
+                    "total_individuals": item.get("Total_Individuals_Worked"),
+                    "raw": item,
+                    "fetched_at": timezone.now(),
+                },
+            )
+            saved += 1
+
+        return JsonResponse({"status": "ok", "saved": saved})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
