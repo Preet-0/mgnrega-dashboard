@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: mgnrega-dashboard
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn mgnrega_proj.wsgi:application"
+    envVars:
+      - key: DEBUG
+        value: False
+      - key: MGNREGA_API_KEY
+        sync: false
+      - key: MGNREGA_RESOURCE_ID
+        sync: false
+      - key: MGNREGA_API_BASE
+        value: "https://api.data.gov.in/resource/"
+    autoDeploy: true
+
+  - type: cron
+    name: mgnrega-fetcher
+    env: python
+    schedule: "0 */12 * * *"  # every 12 hours
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py fetch_mgnrega"
+    envVars:
+      - key: MGNREGA_API_KEY
+        sync: false
+      - key: MGNREGA_RESOURCE_ID
+        sync: false

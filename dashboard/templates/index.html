@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Our Voice — MGNREGA Gujarat</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f5f7fa;
+    margin: 0;
+    padding: 20px;
+}
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 20px;
+}
+h1 {
+    text-align: center;
+    color: #2a4d69;
+}
+button {
+    display: block;
+    margin: 10px auto;
+    padding: 10px 16px;
+    background-color: #2a9d8f;
+    border: none;
+    color: white;
+    font-size: 16px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+button:hover {
+    background-color: #21867a;
+}
+select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
+    margin: 10px 0;
+}
+#detected {
+    text-align: center;
+    color: #1d3557;
+    font-weight: bold;
+    margin-top: 15px;
+    background: #e0f7fa;
+    padding: 8px;
+    border-radius: 6px;
+    display: none;
+}
+footer {
+    text-align: center;
+    margin-top: 20px;
+    color: #888;
+    font-size: 14px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>Our Voice — Our Rights</h1>
+    <p>Select your district or let us detect it automatically.</p>
+
+    <div id="detected"></div>
+
+    <form action="" method="get" id="districtForm">
+        <select id="districtSelect">
+            <option value="">-- Select District --</option>
+            {% for d in districts %}
+                <option value="{{ d.district_code }}">{{ d.district_name }}</option>
+            {% empty %}
+                <option>No districts found. Please run fetch_mgnrega.</option>
+            {% endfor %}
+        </select>
+        <button type="button" id="detectBtn">📍 Detect My District</button>
+        <button type="button" id="goBtn">Go →</button>
+    </form>
+</div>
+
+<footer>Made with ❤️ for MGNREGA Gujarat</footer>
+
+<script>
+document.getElementById("goBtn").onclick = function() {
+    const code = document.getElementById("districtSelect").value;
+    if (code) window.location.href = `/district/${code}/`;
+    else alert("Please select a district first!");
+};
+
+document.getElementById("detectBtn").onclick = function() {
+    const infoBox = document.getElementById("detected");
+    infoBox.style.display = "block";
+    infoBox.textContent = "Detecting your district...";
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(success, error);
+    } else {
+        infoBox.textContent = "Geolocation not supported by your browser.";
+    }
+
+    function success(pos) {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=6`)
+            .then(r => r.json())
+            .then(data => {
+                let district = data.address.district || data.address.state_district || data.display_name;
+                if (district) {
+                    district = district.toUpperCase().trim();
+                    infoBox.textContent = "📍 Detected District: " + district;
+                } else {
+                    infoBox.textContent = "❌ Could not detect district accurately.";
+                }
+            })
+            .catch(() => {
+                infoBox.textContent = "⚠️ Failed to fetch district from location.";
+            });
+    }
+
+    function error() {
+        infoBox.textContent = "❌ Unable to access your location.";
+    }
+};
+</script>
+</body>
+</html>

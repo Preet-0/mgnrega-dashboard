@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ district.district_name }} - MGNREGA Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f5f7fa;
+    margin: 0;
+    padding: 20px;
+}
+.container {
+    max-width: 850px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 25px;
+}
+h1 {
+    text-align: center;
+    color: #2a4d69;
+}
+.controls {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin: 20px 0;
+    gap: 10px;
+}
+select {
+    flex: 1;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 15px;
+}
+canvas {
+    width: 100%;
+    height: 420px;
+}
+footer {
+    text-align: center;
+    margin-top: 30px;
+    color: #777;
+    font-size: 14px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>{{ district.district_name }} District</h1>
+    <p style="text-align:center;">Visualize MGNREGA indicators over time</p>
+
+    <div class="controls">
+        <select id="termSelect">
+            <option value="total_exp_lakhs">💰 Total Expenditure (Lakhs)</option>
+            <option value="wages_lakhs">💵 Wages (Lakhs)</option>
+            <option value="total_jobcards_issued">🪪 Job Cards Issued</option>
+            <option value="total_active_job_cards">📄 Active Job Cards</option>
+            <option value="total_active_workers">⚡ Active Workers</option>
+            <option value="total_workers">👷 Total Workers</option>
+            <option value="total_households">🏡 Total Households Worked</option>
+            <option value="total_individuals">👥 Total Individuals Worked</option>
+        </select>
+
+        <select id="timeSelect">
+            <option value="all">All Time</option>
+            <option value="6">Last 6 Months</option>
+            <option value="12">Last 12 Months</option>
+        </select>
+    </div>
+
+    <canvas id="chart"></canvas>
+</div>
+
+<footer>Made with ❤️ for MGNREGA Gujarat</footer>
+
+<script>
+const records = {{ records|safe }};
+const ctx = document.getElementById('chart');
+let chart;
+
+function getFilteredRecords(months) {
+    if (months === "all") return records;
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - parseInt(months));
+    return records.filter(r => {
+        const d = new Date(`${r.month}-01 ${r.fin_year}`);
+        return d >= cutoff;
+    });
+}
+
+function drawChart(term, months) {
+    const filtered = getFilteredRecords(months);
+    const labels = filtered.map(r => r.month + " " + r.fin_year);
+    const data = filtered.map(r => r[term] || 0);
+    const colors = {
+        "total_exp_lakhs": "#2a9d8f",
+        "wages_lakhs": "#1d3557",
+        "total_jobcards_issued": "#43aa8b",
+        "total_active_job_cards": "#f4a261",
+        "total_active_workers": "#e76f51",
+        "total_workers": "#264653",
+        "total_households": "#8ab17d",
+        "total_individuals": "#6a4c93"
+    };
+    const titles = {
+        "total_exp_lakhs": "Total Expenditure (Lakhs)",
+        "wages_lakhs": "Wages (Lakhs)",
+        "total_jobcards_issued": "Job Cards Issued",
+        "total_active_job_cards": "Active Job Cards",
+        "total_active_workers": "Active Workers",
+        "total_workers": "Total Workers",
+        "total_households": "Total Households Worked",
+        "total_individuals": "Total Individuals Worked"
+    };
+
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: titles[term],
+                data: data,
+                borderColor: colors[term],
+                backgroundColor: colors[term] + "33",
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Month' } },
+                y: { title: { display: true, text: 'Value' } }
+            }
+        }
+    });
+}
+
+// Initialize default chart
+drawChart('total_exp_lakhs', 'all');
+
+// Update on selection change
+document.getElementById('termSelect').addEventListener('change', function() {
+    drawChart(this.value, document.getElementById('timeSelect').value);
+});
+document.getElementById('timeSelect').addEventListener('change', function() {
+    drawChart(document.getElementById('termSelect').value, this.value);
+});
+</script>
+</body>
+</html>
