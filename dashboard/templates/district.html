@@ -39,7 +39,7 @@ select {
   font-size: 15px;
 }
 #refreshBtn {
-  flex: 0 0 90px;
+  flex: 0 0 50px;
   padding: 10px;
   border-radius: 6px;
   border: none;
@@ -48,18 +48,9 @@ select {
   font-weight: bold;
   cursor: pointer;
 }
-#refreshBtn:hover {
-  background-color: #21867a;
-}
-canvas {
-  width: 100%;
-  height: 420px;
-}
-#loading {
-  text-align: center;
-  color: #666;
-  margin-top: 20px;
-}
+#refreshBtn:hover { background-color: #21867a; }
+canvas { width: 100%; height: 420px; }
+#loading { text-align: center; color: #666; margin-top: 20px; }
 footer {
   text-align: center;
   margin-top: 30px;
@@ -111,7 +102,31 @@ const districtCode = "{{ district.district_code }}";
 const cacheKey = `mgnrega_${districtName.toUpperCase()}`;
 let chart;
 
-// ---- FETCH DATA LOGIC ----
+// ---- FETCH ALL PAGES ----
+async function fetchAllPages() {
+  const allRecords = [];
+  const baseUrl = "https://api.data.gov.in/resource/ee03643a-ee4c-48c2-ac30-9f2ff26ab722";
+  const limit = 1000; // API max per page
+  let offset = 0;
+
+  while (true) {
+    const url = `${baseUrl}?api-key=579b464db66ec23bdd000001ad99c73e64ee402661b53ad8cf39ba86&format=json&filters[district_name]=${encodeURIComponent(districtName)}&limit=${limit}&offset=${offset}`;
+    const res = await fetch(url);
+    if (!res.ok) break;
+
+    const json = await res.json();
+    const records = json.records || [];
+    if (records.length === 0) break;
+
+    allRecords.push(...records);
+    if (records.length < limit) break; // no more pages
+    offset += limit;
+  }
+
+  return allRecords;
+}
+
+// ---- MAIN FETCH FUNCTION ----
 async function fetchData(force = false) {
   const cache = localStorage.getItem(cacheKey);
   if (!force && cache) {
@@ -123,13 +138,10 @@ async function fetchData(force = false) {
   loading.style.display = 'block';
   ctx.style.display = 'none';
 
-  const apiUrl = `https://api.data.gov.in/resource/ee03643a-ee4c-48c2-ac30-9f2ff26ab722?api-key=579b464db66ec23bdd000001ad99c73e64ee402661b53ad8cf39ba86&format=json&filters[district_name]=${encodeURIComponent(districtName)}`;
   try {
-    const res = await fetch(apiUrl);
-    const json = await res.json();
-    const records = json.records || [];
+    const records = await fetchAllPages();
 
-    // Save locally + to backend
+    // Save locally + push to backend
     localStorage.setItem(cacheKey, JSON.stringify({ records, updated_at: Date.now() }));
     sendToBackend(records);
     drawChart(filterByTime(records, timeSelect.value), termSelect.value);
